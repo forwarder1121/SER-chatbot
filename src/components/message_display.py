@@ -178,6 +178,103 @@ def apply_chat_styles():
         ::-webkit-scrollbar-thumb:hover {
             background: #5A5A5A;
         }
+        
+        /* 마이크 버튼 스타일 */
+        .mic-button {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #007AFF;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .mic-button:hover {
+            background-color: #0056b3;
+        }
+
+        .mic-button.recording {
+            background-color: #dc3545;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        
+        /* 마이크 이미지 버튼 스타일 */
+        .stImage {
+            cursor: pointer;
+            transition: transform 0.3s;
+        }
+        
+        .stImage:hover {
+            transform: scale(1.1);
+        }
+        
+        .stImage.recording {
+            animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        
+        /* 녹음 버튼 스타일 */
+        .stButton button {
+            width: 40px !important;
+            height: 40px !important;
+            border-radius: 50% !important;
+            padding: 0 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            font-size: 1.5rem !important;
+            background-color: #007AFF !important;
+            transition: all 0.3s ease !important;
+        }
+        
+        .stButton button:hover {
+            background-color: #0056b3 !important;
+            transform: scale(1.1) !important;
+        }
+        
+        /* 녹음 중일 때 버튼 스타일 */
+        .audio_recorder_state .stButton button {
+            background-color: #dc3545 !important;
+            animation: pulse 1.5s infinite !important;
+        }
+        
+        /* 녹음 중 표시 스타일 */
+        .recording-indicator {
+            color: #dc3545;
+            font-size: 0.9rem;
+            margin-top: 0.5rem;
+            text-align: center;
+            animation: blink 1s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        
+        @keyframes blink {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
         </style>
     """, unsafe_allow_html=True)
 def get_emotion_class(emotion: str) -> str:

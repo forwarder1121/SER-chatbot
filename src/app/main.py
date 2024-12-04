@@ -9,6 +9,12 @@ from src.core.services.chatbot_service import ChatbotService
 from src.app.config import OpenAIConfig
 from src.utils.audio_handler import process_audio_input
 from src.components.message_display import apply_chat_styles, display_message, get_emotion_color
+from streamlit_webrtc import webrtc_streamer, WebRtcMode
+import queue
+import threading
+import wave
+import pyaudio
+from PIL import Image
 
 # 음성 감정 인식 모델 설정
 model_name = "forwarder1121/ast-finetuned-model"
@@ -177,13 +183,18 @@ def main():
             'negative': 0
         }
 
+    # 음성 녹음을 위한 상태 변수
+    if 'audio_recorder_state' not in st.session_state:
+        st.session_state.audio_recorder_state = False
+        st.session_state.audio_queue = queue.Queue()
+
     # 사이드바
     with st.sidebar:
         st.title("감정인식 챗봇 🏠")
 
         st.markdown("### 사용 방법")
         st.markdown("""
-        1. 채팅창에 현재 기분이나 상황을 입력하세요.
+        1. 채팅창에 현재 기분이나 근황을 입력하세요.
         2. 음성 파일을 업로드하여 감정을 분석할 수 있습니다.
         3. 챗봇이 감정을 분석하고 공감적인 대화를 제공합니다.
         4. 필요한 경우 적절한 조언이나 위로를 받을 수 있습니다.
@@ -193,7 +204,7 @@ def main():
         if 'current_emotion' in st.session_state:
             st.markdown("### 현재 감정 상태")
             emotion = st.session_state.current_emotion
-            emotion_color = get_emotion_color(emotion)  # 감정에 따른 색상 가져오기
+            emotion_color = get_emotion_color(emotion)  # 정에 따른 색상 가져오기
             st.markdown(f"""
             <div style="
                 display: flex;
@@ -230,14 +241,106 @@ def main():
 
     # 메인 채팅 영역
     st.title("채팅")
+    
+    # 채팅 입력 영역을 컬럼으로 분할
+    col1, col2 = st.columns([0.1, 0.9])
+    
+    with col1:
+        # 마이크 버튼
+        mic_status = "녹음 중..." if st.session_state.get('audio_recorder_state', False) else "음성 녹음"
+        if st.button("🎙️", key="mic_button", help=mic_status):
+            st.session_state.audio_recorder_state = not st.session_state.get('audio_recorder_state', False)
+            
+    with col2:
+        # 텍스트 입력
+        prompt = st.chat_input("메시지를 입력하세요...")
 
-    # 메시지 표시
-    for message in st.session_state.get('messages', []):
-        with st.chat_message(message["role"]):
-            display_message(message)
+    # 녹음 상태 표시
+    if st.session_state.get('audio_recorder_state', False):
+        st.markdown("""
+            <div class='recording-indicator'>
+                녹음 중... 🎙️
+            </div>
+        """, unsafe_allow_html=True)
 
-    # 텍스트 입력창
-    if prompt := st.chat_input("메시지를 입력하세요..."):
+    # 음성 녹음 처리
+    if st.session_state.get('audio_recorder_state', False):
+        try:
+            # PyAudio 설정
+            CHUNK = 1024
+            FORMAT = pyaudio.paFloat32
+            CHANNELS = 1
+            RATE = 16000
+
+            p = pyaudio.PyAudio()
+            stream = p.open(
+                format=FORMAT,
+                channels=CHANNELS,
+                rate=RATE,
+                input=True,
+                frames_per_buffer=CHUNK
+            )
+
+            # 녹음 중임을 표시
+            with st.spinner("녹음 중..."):
+                frames = []
+                for i in range(0, int(RATE / CHUNK * 5)):  # 5초 녹음
+                    data = stream.read(CHUNK)
+                    frames.append(data)
+
+            # 녹음 종료 및 정리
+            stream.stop_stream()
+            stream.close()
+            p.terminate()
+
+            # 녹음된 데이터를 WAV 파일로 저장
+            with wave.open("temp_recording.wav", 'wb') as wf:
+                wf.setnchannels(CHANNELS)
+                wf.setsampwidth(p.get_sample_size(FORMAT))
+                wf.setframerate(RATE)
+                wf.writeframes(b''.join(frames))
+
+            # 음성을 텍스트로 변환
+            with open("temp_recording.wav", "rb") as audio_file:
+                audio_text, detected_language = process_audio_input(
+                    audio_file.read(),
+                    language_options=('ko-KR', 'en-US')
+                )
+
+            if audio_text:
+                # 텍스트로 변환된 음성을 채팅창에 추가
+                chatbot = st.session_state.chatbot_service
+                emotions = chatbot.analyze_emotion(audio_text)
+                dominant_emotion = max(emotions.items(), key=lambda x: x[1])[0]
+                response = chatbot.get_response(audio_text)
+
+                current_time = datetime.now().strftime('%p %I:%M')
+                st.session_state.messages.extend([
+                    {
+                        "role": "user",
+                        "content": f"[음성 메시지] {audio_text}",
+                        "emotion": dominant_emotion,
+                        "timestamp": current_time
+                    },
+                    {
+                        "role": "assistant",
+                        "content": response,
+                        "timestamp": current_time
+                    }
+                ])
+
+                # 통계 업데이트
+                update_conversation_stats(dominant_emotion)
+                st.rerun()
+
+        except Exception as e:
+            st.error(f"음성 녹음 중 오류가 발생했습니다: {str(e)}")
+            
+        finally:
+            st.session_state.audio_recorder_state = False
+
+    # 기존의 텍스트 입력 처리 코드
+    if prompt:
         if prompt.strip():
             chatbot = st.session_state.chatbot_service
             emotions = chatbot.analyze_emotion(prompt)
